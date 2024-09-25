@@ -13,11 +13,9 @@ function PhotoVideo({ token, username, backendURL }) {
 
   //Fetch and decode the idToken from sessionStorage
   useEffect(() => {
-    const accessToken = sessionStorage.getItem("accessToken");
-    if (accessToken) {
-      const extractedUsername = accessToken["username"];
-      console.log("Received username: ", extractedUsername);
-      setUser(extractedUsername);
+    const storedUsername = sessionStorage.getItem("username");
+    if (storedUsername) {
+      setUser(storedUsername);
     } else {
       navigate("/login"); //if no idToken found
     }
@@ -27,6 +25,7 @@ function PhotoVideo({ token, username, backendURL }) {
   const handleLogout = () => {
     sessionStorage.removeItem("accessToken");
     sessionStorage.removeItem("idToken");
+    sessionStorage.removeItem("username");
     navigate("/login");
   };
 
