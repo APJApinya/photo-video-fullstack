@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import axios from "axios";
 import { Container, Row, Col, Button, Form } from "react-bootstrap"; // Import React Bootstrap components
 
-function UploadComponent({ onUploadComplete, token }) {
+function UploadComponent({ onUploadComplete, token, username }) {
   const [files, setFiles] = useState([]);
   
 // Set the backend URL based on the environment
@@ -31,7 +31,8 @@ const backendURL = process.env.REACT_APP_BACKEND_URL
     try {
       await axios.post(`${backendURL}/catalog/upload`, formData, {
         headers: {
-          Authorization: token, // Ensure token is passed in headers
+          Authorization: token,
+          Username: username,
         },
       });
       alert("Photos uploaded successfully!");

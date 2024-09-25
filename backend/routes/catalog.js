@@ -20,7 +20,7 @@ if (!fs.existsSync(outputDir)) {
 
 // Handle POST request to upload photos
 router.post("/upload", (req, res) => {
-  const username = req.user; // Get the username from the request
+  const username = req.username; // Get the username from the request
   if (!username) {
     console.error("Username is missing in request headers");
     return res.status(400).send("Username is missing in request headers.");

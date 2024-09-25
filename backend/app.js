@@ -3,13 +3,14 @@ const path = require("path");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const createError = require('http-errors');
-const jwt = require("jsonwebtoken"); // Import jsonwebtoken
 const indexRouter = require("./routes/index");
-const { router: usersRouter, users } = require("./routes/users");
+// const { router: usersRouter, users } = require("./routes/users");
 const catalogRouter = require("./routes/catalog");
-const loadTestRoute = require("./routes/load-test");
+const authRouter = require("./routes/auth");
 
+require('dotenv').config();
 const app = express();
+const AWS = require("aws-sdk"); 
 
 // Serve the uploads directory as static
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -27,38 +28,46 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
-// JWT Secret Key (Should be stored securely in environment variables in a production app)
-const JWT_SECRET = 'your_secret_key';
+// Initialize AWS Cognito SDK
+const cognito = new AWS.CognitoIdentityServiceProvider({
+  region: "ap-southeast-2",
+});
 
-// JWT Authorization middleware
-function jwtAuthorize(req, res, next) {
+// TODO: Cognito Authorization middleware (need to take username from frontend)
+async function cognitoAuthorize(req, res, next) {
   const token = req.headers['authorization'];
+  const username = req.headers['username'];
 
-  if (!token) {
-    return res.status(401).send('Unauthorized: No token provided');
+  if (!token || !username) {
+    return res.status(401).send('Unauthorized: No token or username provided');
   }
 
-  jwt.verify(token, JWT_SECRET, (err, decoded) => {
-    if (err) {
-      return res.status(401).send('Unauthorized: Invalid token');
-    } else {
-      req.user = decoded.user; // Assuming the decoded token has the 'user' field
-      req.username = decoded.username; // Assuming the decoded token has the 'username' field
+  try {
+    const accessToken = token.replace('Bearer ','');
+    // Get user info from Cognito using the token
+    const params = {
+      AccessToken: accessToken,
+    };
+
+    const userInfo = await cognito.getUser(params).promise();
+      req.username = username;
       next();
+    } catch (error) {
+      console.error("Error verifying token:", error);
+      res.status(401).send('Unauthorized: Invalid Token');
     }
-  });
 }
 
 // Apply JWT authorization middleware to routes that need it
-app.use("/catalog", jwtAuthorize);
-app.use("/users/protected-route", jwtAuthorize);
-app.use("/catalog/list-videos", jwtAuthorize);
+app.use("/catalog", cognitoAuthorize);
+app.use("/catalog/list-videos", cognitoAuthorize);
 
 app.use("/", indexRouter);
-app.use("/users", usersRouter);
 app.use("/catalog", catalogRouter);
-app.use('/videos', express.static(path.join(__dirname, 'videos')));
-app.use("/load-test", loadTestRoute);
+app.use("/videos", express.static(path.join(__dirname, 'videos')));
+app.use("/auth", authRouter); // Handle Login and SignUp
+
+
 
 // Catch 404 and forward to error handler
 app.use(function (req, res, next) {
