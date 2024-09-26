@@ -1,28 +1,40 @@
 const express = require("express");
 const multer = require("multer");
 const ffmpeg = require("fluent-ffmpeg");
+const fs = require("fs");
+const path = require("path");
+
+// Import S3
 const {
   PutObjectCommand,
   ListObjectsV2Command,
   GetObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
-const fs = require('fs');
-const path = require("path");
+
+// Import DynamoDB
+const AWS = require("aws-sdk");
+const { v4: uuidv4 } = require("uuid"); // for creating unique video id
 
 const router = express.Router();
 const bucketName = process.env.AWS_BUCKET_NAME;
-
-// Configure Multer to handle file uploads
+const dynamodb = new AWS.DynamoDB.DocumentClient({
+  region: "ap-southeast-2",
+});
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage }).array("photos", 10);
-
 ffmpeg.setFfmpegPath("/usr/bin/ffmpeg");
 
 // TODO: Upload photos to S3 in 'uploads/{username}'
-router.post("/upload", (req, res) => {
+router.post("/upload", async (req, res) => {
   const s3Client = req.app.get("s3Client");
+  const pool = req.app.get("mysqlPool");
+  if (!pool) {
+    console.error("MySQL pool is undefined!");
+    return res.status(500).send("MySQL pool is not available.");
+  }
   const username = req.username; // Get the username from the request
   if (!username) {
     console.error("Username is missing in request headers");
@@ -44,6 +56,20 @@ router.post("/upload", (req, res) => {
           Body: file.buffer,
         };
         await s3Client.send(new PutObjectCommand(uploadParams));
+
+        // Insert photo metadata into RDS
+        const user = username;
+        const file_name = file.originalname;
+        const file_type = file.mimetype;
+        const upload_timestamp = new Date();
+
+        // Insert into MySQL RDS
+        const result = await pool.query(`
+          INSERT INTO photos (user, file_name, file_type, upload_timestamp)
+          VALUES (?, ?, ?, ?)
+        `, [user, file_name, file_type, upload_timestamp]);
+
+        console.log("Photo metadata inserted successfully:", result);
       }
       res.send("Photos uploaded successfully.");
     } catch (error) {
@@ -94,22 +120,17 @@ router.get("/generate-video", async (req, res) => {
       })
     );
 
-    // // Generate video using ffmpeg and obtain the video buffer
-    // const videoBuffer = await generateVideo(photoUrls);
     // Generate video and get the temporary file path
     const outputFile = await generateVideo(photoUrls, username);
 
     // Upload the video to S3
-
     const fileStream = fs.createReadStream(outputFile);
-
     const uploadParams = {
       Bucket: bucketName,
       Key: videoKey,
       Body: fileStream,
       ContentType: "video/mp4",
     };
-
     await s3Client.send(new PutObjectCommand(uploadParams));
     console.log("Video uploaded to S3 successfully.");
 
@@ -131,6 +152,26 @@ router.get("/generate-video", async (req, res) => {
       }),
       { expiresIn: 3600 }
     );
+
+    // Generate unique video_id and record metadata in DynamoDB
+    const video_id = uuidv4();
+    const videoMetadata = {
+      TableName: "n11780100-video-detail",
+      Item: {
+        video_id: video_id, // Sort key
+        user: username,
+        upload_timestamp: new Date().toISOString(),
+        video_url: signedUrl,
+        format: "mp4",
+      },
+    };
+    // Save metadata to DynamoDB
+    try {
+      await dynamodb.put(videoMetadata).promise();
+      console.log("Video metadata recorded in DynamoDB successfully.");
+    } catch (error) {
+      console.error("Error recording video metadata to DynamoDB:", error);
+    }
 
     res.json({ videoUrl: signedUrl });
   } catch (error) {
@@ -288,15 +329,15 @@ async function generateVideo(photoUrls, username) {
       .save(outputFile); // Save to temporary file
   });
 }
-// Helper function to upload the generated video to S3
-async function uploadGeneratedVideo(s3Client, videoKey, videoBuffer) {
-  const uploadParams = {
-    Bucket: bucketName,
-    Key: videoKey,
-    Body: videoBuffer, // Directly upload the buffer
-    ContentType: "video/mp4",
-  };
-  return s3Client.send(new PutObjectCommand(uploadParams));
-}
+// // Helper function to upload the generated video to S3
+// async function uploadGeneratedVideo(s3Client, videoKey, videoBuffer) {
+//   const uploadParams = {
+//     Bucket: bucketName,
+//     Key: videoKey,
+//     Body: videoBuffer, // Directly upload the buffer
+//     ContentType: "video/mp4",
+//   };
+//   return s3Client.send(new PutObjectCommand(uploadParams));
+// }
 
 module.exports = router;
