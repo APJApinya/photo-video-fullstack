@@ -8,6 +8,7 @@ const {
   DeleteObjectsCommand,
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const fs = require('fs');
 const path = require("path");
 
 const router = express.Router();
@@ -61,7 +62,6 @@ router.post("/upload", (req, res) => {
 router.get("/generate-video", async (req, res) => {
   const s3Client = req.app.get("s3Client");
   const username = req.username;
-  console.log("username in generate-video is", username);
   if (!username) {
     console.error("Username is missing in request headers");
     return res.status(400).send("Username is missing in request headers.");
@@ -77,7 +77,6 @@ router.get("/generate-video", async (req, res) => {
     if (photoKeys.length < 10) {
       return res.status(400).send("Please upload at least 10 photos.");
     }
-    console.log("Photo keys from S3:", photoKeys);
 
     const videoKey = `videos/${username}/output-video-${Date.now()}.mp4`;
 
@@ -95,18 +94,33 @@ router.get("/generate-video", async (req, res) => {
       })
     );
 
-    console.log("Photo URLs for video generation:", photoUrls);
-
-    // Generate video using ffmpeg and obtain the video buffer
-    const videoBuffer = await generateVideo(photoUrls);
+    // // Generate video using ffmpeg and obtain the video buffer
+    // const videoBuffer = await generateVideo(photoUrls);
+    // Generate video and get the temporary file path
+    const outputFile = await generateVideo(photoUrls, username);
 
     // Upload the video to S3
-    const uploadResponse = await uploadGeneratedVideo(
-      s3Client,
-      videoKey,
-      videoBuffer
-    );
-    console.log("Upload response:", uploadResponse);
+
+    const fileStream = fs.createReadStream(outputFile);
+
+    const uploadParams = {
+      Bucket: bucketName,
+      Key: videoKey,
+      Body: fileStream,
+      ContentType: "video/mp4",
+    };
+
+    await s3Client.send(new PutObjectCommand(uploadParams));
+    console.log("Video uploaded to S3 successfully.");
+
+    // Delete the local temporary file after uploading
+    fs.unlink(outputFile, (err) => {
+      if (err) {
+        console.error("Error deleting the temporary file:", err);
+      } else {
+        console.log("Temporary file deleted successfully.");
+      }
+    });
 
     // Send the video file URL as a response
     const signedUrl = await getSignedUrl(
@@ -232,8 +246,10 @@ async function deleteUserFilesInFolder(s3Client, username, folder) {
 }
 
 // Helper function to generate video using ffmpeg
-async function generateVideo(photoUrls) {
+async function generateVideo(photoUrls, username) {
   return new Promise((resolve, reject) => {
+    const outputFile = path.join("/tmp", `${username}_output.mp4`); // Temporary file
+
     const ffmpegCommand = ffmpeg();
 
     // Add inputs and options for FFmpeg command
@@ -249,11 +265,15 @@ async function generateVideo(photoUrls) {
       .join("; ");
     const concatInput = photoUrls.map((_, index) => `[v${index}]`).join("");
     const filterComplex = `${filterComplexParts}; ${concatInput}concat=n=${photoUrls.length}:v=1:a=0[v]`;
-    const buffers = [];  // Initialize buffer to store video output
 
     ffmpegCommand
       .complexFilter(filterComplex)
-      .outputOptions(["-map [v]", "-c:v libx264", "-pix_fmt yuv420p", "-movflags +faststart"])
+      .outputOptions([
+        "-map [v]",
+        "-c:v libx264",
+        "-pix_fmt yuv420p",
+        "-movflags +faststart",
+      ])
       .on("start", function (commandLine) {
         console.log("Spawned Ffmpeg with command: " + commandLine);
       })
@@ -263,15 +283,9 @@ async function generateVideo(photoUrls) {
       })
       .on("end", function () {
         console.log("Video generated successfully.");
-        resolve(Buffer.concat(buffers));  // Resolve with the full buffer when done
-      });
-      ffmpegCommand
-      .format("mp4")
-      .output('pipe:1')  // Output to pipe
-      .pipe()
-      .on("data", function (chunk) {
-        buffers.push(chunk);  // Collect the chunks
-      });
+        resolve(outputFile); // Resolve with the file path when done
+      })
+      .save(outputFile); // Save to temporary file
   });
 }
 // Helper function to upload the generated video to S3
