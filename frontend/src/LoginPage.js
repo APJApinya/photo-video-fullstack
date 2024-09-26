@@ -23,7 +23,7 @@ function LoginPage() {
       sessionStorage.setItem("accessToken", accessToken); // used in API calls that need authorization (in the header)
       sessionStorage.setItem("idToken", idToken); // used in frontend logic as it stores user info
       if (sessionStorage.getItem("accessToken")) {
-        navigate("/home");
+        window.location.reload();
       }
     } catch (error) {
       console.error("Login failed:", error);

@@ -4,16 +4,21 @@ const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const createError = require('http-errors');
 const indexRouter = require("./routes/index");
-// const { router: usersRouter, users } = require("./routes/users");
 const catalogRouter = require("./routes/catalog");
 const authRouter = require("./routes/auth");
 
 require('dotenv').config();
+const { S3Client } = require("@aws-sdk/client-s3");
+
 const app = express();
 const AWS = require("aws-sdk"); 
 
 // Serve the uploads directory as static
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Initialize AWS S3 SDK client
+const s3Client = new S3Client({ region: 'ap-southeast-2' });
+app.set('s3Client', s3Client);
 
 const RateLimit = require("express-rate-limit");
 const limiter = RateLimit({
@@ -35,26 +40,16 @@ const cognito = new AWS.CognitoIdentityServiceProvider({
 
 // TODO: Cognito Authorization middleware (need to take username from frontend)
 async function cognitoAuthorize(req, res, next) {
-  const token = req.headers['authorization'];
   const username = req.headers['username'];
-
-  if (!token || !username) {
-    return res.status(401).send('Unauthorized: No token or username provided');
+  if (!username) {
+    return res.status(401).send('Unauthorized: No username provided');
   }
-
   try {
-    const accessToken = token.replace('Bearer ','');
-    // Get user info from Cognito using the token
-    const params = {
-      AccessToken: accessToken,
-    };
-
-    const userInfo = await cognito.getUser(params).promise();
-      req.username = username;
-      next();
+    req.username = username;
+    next();
     } catch (error) {
-      console.error("Error verifying token:", error);
-      res.status(401).send('Unauthorized: Invalid Token');
+      console.error("Error om middleware:", error);
+      res.status(500).send('Internal Server Error');
     }
 }
 
@@ -64,7 +59,7 @@ app.use("/catalog/list-videos", cognitoAuthorize);
 
 app.use("/", indexRouter);
 app.use("/catalog", catalogRouter);
-app.use("/videos", express.static(path.join(__dirname, 'videos')));
+// app.use("/videos", express.static(path.join(__dirname, 'videos')));
 app.use("/auth", authRouter); // Handle Login and SignUp
 
 

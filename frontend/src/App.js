@@ -16,7 +16,6 @@ const App = () => {
         <Route path="/" element={isAuthenticated() ? <PhotoVideo /> : <LoginPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<Signup />} />
-        <Route path="/home" element={isAuthenticated() ? <PhotoVideo /> : <LoginPage />} />
       </Routes>
     </BrowserRouter>
   );

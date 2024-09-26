@@ -4,20 +4,21 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import UploadComponent from "./UploadComponent";
 
-function PhotoVideo({ token, username, backendURL }) {
+function PhotoVideo() {
   const [user, setUser] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [userVideos, setUserVideos] = useState([]);
 
   const navigate = useNavigate();
+  const backendURL = process.env.REACT_APP_BACKEND_URL;
 
-  //Fetch and decode the idToken from sessionStorage
+  //Fetch username from session storage
   useEffect(() => {
     const storedUsername = sessionStorage.getItem("username");
     if (storedUsername) {
       setUser(storedUsername);
     } else {
-      navigate("/login"); //if no idToken found
+      navigate("/login");
     }
   }, [navigate]);
 
@@ -30,15 +31,15 @@ function PhotoVideo({ token, username, backendURL }) {
   };
 
   // Function to fetch the user's videos
-  const fetchUserVideos = async (token, username) => {
+  const fetchUserVideos = async () => {
     try {
       const response = await axios.get(`${backendURL}/catalog/list-videos`, {
         headers: {
-          Authorization: `Bearer ${token}`,
-          Username: username,
+          Username: user
         },
       });
       setUserVideos(response.data);
+      console.log("This is user video data from fetchUserVideos(): ", userVideos);
     } catch (error) {
       console.error("Error fetching user videos:", error);
     }
@@ -50,11 +51,10 @@ function PhotoVideo({ token, username, backendURL }) {
     try {
       await axios.get(`${backendURL}/catalog/generate-video`, {
         headers: {
-          Authorization: `Bearer ${token}`,
-          Username: username,
+          Username: user
         },
       });
-      fetchUserVideos(token, username); // Refresh the list of videos after generating a new one
+      fetchUserVideos(); // Refresh the list of videos after generating a new one
     } catch (error) {
       console.error("Error generating video:", error);
     } finally {
@@ -67,11 +67,10 @@ function PhotoVideo({ token, username, backendURL }) {
     try {
       await axios.delete(`${backendURL}/catalog/delete-video/${filename}`, {
         headers: {
-          Authorization: `Bearer ${token}`,
-          Username: username,
+          Username: user
         },
       });
-      fetchUserVideos(token, username); // Refresh the list of videos after deleting
+      fetchUserVideos(); // Refresh the list of videos after deleting
     } catch (error) {
       console.error("Error deleting video:", error);
     }
@@ -93,8 +92,6 @@ function PhotoVideo({ token, username, backendURL }) {
           </Button>
           <UploadComponent
             onUploadComplete={handleGenerateVideo}
-            token={token}
-            username={username}
           />
 
           {isLoading && (
@@ -104,7 +101,7 @@ function PhotoVideo({ token, username, backendURL }) {
             </div>
           )}
 
-          {userVideos.length > 0 && !isLoading && (
+          {Array.isArray(userVideos) && userVideos.length > 0 && !isLoading && (
             <div className="mt-1">
               <h2 className="text-center mb-4 header-text">Your Videos</h2>
               <Row>
@@ -112,6 +109,7 @@ function PhotoVideo({ token, username, backendURL }) {
                   <Col xs={12} md={6} lg={4} key={index} className="mb-4">
                     <Card className="h-100">
                       <Card.Body className="d-flex flex-column justify-content-between">
+                      {/* FIXME: */}
                         <video
                           src={`${backendURL}/videos/${video.path}`}
                           controls
