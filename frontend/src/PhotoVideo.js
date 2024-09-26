@@ -45,6 +45,13 @@ function PhotoVideo() {
     }
   };
 
+  // Fetch user videos when the user state is set
+  useEffect(() => {
+    if(user){
+        fetchUserVideos();
+    }
+  }, [user]);
+
   // Function to handle video generation
   const handleGenerateVideo = async () => {
     setIsLoading(true);
@@ -109,9 +116,8 @@ function PhotoVideo() {
                   <Col xs={12} md={6} lg={4} key={index} className="mb-4">
                     <Card className="h-100">
                       <Card.Body className="d-flex flex-column justify-content-between">
-                      {/* FIXME: */}
                         <video
-                          src={`${backendURL}/videos/${video.path}`}
+                          src={video.url}
                           controls
                           width="100%"
                           className="mb-3"

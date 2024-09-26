@@ -5,7 +5,7 @@ const {
   PutObjectCommand,
   ListObjectsV2Command,
   GetObjectCommand,
-  DeleteObjectsCommand,
+  DeleteObjectCommand,
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const fs = require('fs');
