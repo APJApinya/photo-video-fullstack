@@ -51,7 +51,7 @@ ENV NODE_ENV production
 ENV COGNITO_POOL_ID=ap-southeast-2_tS0yDXCN3
 ENV COGNITO_POOL_APP_ID=8eg6dbrtk09o7km999e6jih8f
 ENV AWS_BUCKET_NAME=n11780100-assignment2
-ENV AWS_RDS_SECRET=rds!db-14ca4a11-0ce3-44fc-8679-17f46e0c227b
+ENV QUT_USERNAME=n11780100@qut.edu.au
 
 # Expose ports for frontend and backend
 EXPOSE 80 3000

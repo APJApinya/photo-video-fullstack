@@ -3,7 +3,7 @@ const multer = require("multer");
 const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs");
 const path = require("path");
-
+const router = express.Router();
 // Import S3
 const {
   PutObjectCommand,
@@ -13,16 +13,20 @@ const {
   DeleteObjectsCommand,
 } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
-
-// Import DynamoDB
-const AWS = require("aws-sdk");
-const { v4: uuidv4 } = require("uuid"); // for creating unique video id
-
-const router = express.Router();
 const bucketName = process.env.AWS_BUCKET_NAME;
-const dynamodb = new AWS.DynamoDB.DocumentClient({
-  region: "ap-southeast-2",
-});
+
+// Import and initialize DynamoDB
+const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
+const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
+const { v4: uuidv4 } = require("uuid"); // for creating unique video id
+const dynamoClient = new DynamoDBClient({ region: "ap-southeast-2" });
+const dynamoDocClient = DynamoDBDocumentClient.from(dynamoClient);
+const qutUsername = process.env.QUT_USERNAME;
+const dynamoTableName = "n11780100-video-detail";
+const partitionKey = "qut-username";
+const sortKey = "video_id";
+
+// Import Multer
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage }).array("photos", 10);
 ffmpeg.setFfmpegPath("/usr/bin/ffmpeg");
@@ -64,10 +68,13 @@ router.post("/upload", async (req, res) => {
         const upload_timestamp = new Date();
 
         // Insert into MySQL RDS
-        const result = await pool.query(`
+        const result = await pool.query(
+          `
           INSERT INTO photos (user, file_name, file_type, upload_timestamp)
           VALUES (?, ?, ?, ?)
-        `, [user, file_name, file_type, upload_timestamp]);
+        `,
+          [user, file_name, file_type, upload_timestamp]
+        );
 
         console.log("Photo metadata inserted successfully:", result);
       }
@@ -152,27 +159,26 @@ router.get("/generate-video", async (req, res) => {
       }),
       { expiresIn: 3600 }
     );
-
     // Generate unique video_id and record metadata in DynamoDB
-    const video_id = uuidv4();
-    const videoMetadata = {
-      TableName: "n11780100-video-detail",
+    const videoID = uuidv4();
+    const videoMetadata = new PutCommand({
+      TableName: dynamoTableName,
       Item: {
-        video_id: video_id, // Sort key
-        user: username,
-        upload_timestamp: new Date().toISOString(),
-        video_url: signedUrl,
-        format: "mp4",
+          [partitionKey]: qutUsername,
+          [sortKey]: videoID,
+          user: username,
+          upload_timestamp: new Date().toISOString(),
+          video_url: signedUrl,
+          format: "mp4",
       },
-    };
+    });
     // Save metadata to DynamoDB
     try {
-      await dynamodb.put(videoMetadata).promise();
+      await dynamoDocClient.send(videoMetadata);
       console.log("Video metadata recorded in DynamoDB successfully.");
     } catch (error) {
       console.error("Error recording video metadata to DynamoDB:", error);
     }
-
     res.json({ videoUrl: signedUrl });
   } catch (error) {
     console.error("Error generating video:", error);
