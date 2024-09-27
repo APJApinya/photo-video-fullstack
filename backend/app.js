@@ -24,14 +24,35 @@ const cognito = new AWS.CognitoIdentityServiceProvider({
 
 // Initialize MySQL connection
 const mysql = require("mysql2/promise");
+const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
 
+const secretClient = new SecretsManagerClient({ region: "ap-southeast-2" });
+const secretName = "n11780100-RDS";
+async function getMysqlCredentials() {
+  try {
+    const response = await secretClient.send(
+      new GetSecretValueCommand({ SecretId: secretName, VersionStage: "AWSCURRENT" })
+    );
+    const secret = JSON.parse(response.SecretString);
+    return {
+      host: secret.host,
+      user: secret.username,
+      password: secret.password,
+      database: secret.database,
+    };
+  } catch (error) {
+    console.error("Error fetching secrets from Secrets Manager:", error);
+    throw error;
+  }
+}
 async function createPool(app) {
   try {
+    const credentials = await getMysqlCredentials();
     const pool = mysql.createPool({
-      host: "n11780100-photodetail.ce2haupt2cta.ap-southeast-2.rds.amazonaws.com",
-      user: "admin",
-      password: "Password123&",
-      database: "n11780100-photodetail",
+      host: credentials.host,
+      user: credentials.user,
+      password: credentials.password,
+      database: credentials.database,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
@@ -47,7 +68,7 @@ async function createPool(app) {
 // Set up the MySQL pool globally
 createPool(app).catch((error) => {
   console.error("Error during pool creation:", error);
-})
+});
 
 const RateLimit = require("express-rate-limit");
 const limiter = RateLimit({
@@ -62,7 +83,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
-// TODO: Cognito Authorization middleware (need to take username from frontend)
+// Cognito Authorization middleware (need to take username from frontend)
 async function cognitoAuthorize(req, res, next) {
   const username = req.headers["username"];
   if (!username) {
@@ -77,13 +98,13 @@ async function cognitoAuthorize(req, res, next) {
   }
 }
 
-// Apply JWT authorization middleware to routes that need it
+// Initialize your routes after parameters are cached
 app.use("/catalog", cognitoAuthorize);
 app.use("/catalog/list-videos", cognitoAuthorize);
 
 app.use("/", indexRouter);
 app.use("/catalog", catalogRouter);
-app.use("/auth", authRouter); // Handle Login and SignUp
+app.use("/auth", authRouter);
 
 // Catch 404 and forward to error handler
 app.use(function (req, res, next) {

@@ -4,6 +4,8 @@ const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs");
 const path = require("path");
 const router = express.Router();
+const { getParameterFromStore } = require("../parameterCache");
+
 // Import S3
 const {
   PutObjectCommand,
@@ -21,7 +23,6 @@ const { DynamoDBDocumentClient, PutCommand } = require("@aws-sdk/lib-dynamodb");
 const { v4: uuidv4 } = require("uuid"); // for creating unique video id
 const dynamoClient = new DynamoDBClient({ region: "ap-southeast-2" });
 const dynamoDocClient = DynamoDBDocumentClient.from(dynamoClient);
-const qutUsername = process.env.QUT_USERNAME;
 const dynamoTableName = "n11780100-video-detail";
 const partitionKey = "qut-username";
 const sortKey = "video_id";
@@ -30,6 +31,7 @@ const sortKey = "video_id";
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage }).array("photos", 10);
 ffmpeg.setFfmpegPath("/usr/bin/ffmpeg");
+
 
 // TODO: Upload photos to S3 in 'uploads/{username}'
 router.post("/upload", async (req, res) => {
@@ -52,6 +54,7 @@ router.post("/upload", async (req, res) => {
     try {
       // Delete existing photos in 'uploads/{username}' folder before uploading new ones
       await deleteUserFilesInFolder(s3Client, username, "uploads/");
+      // FIXME: 
 
       for (const file of req.files) {
         const uploadParams = {
@@ -112,6 +115,7 @@ router.get("/generate-video", async (req, res) => {
     }
 
     const videoKey = `videos/${username}/output-video-${Date.now()}.mp4`;
+    //FIXME:
 
     // Get presigned URLs for the photos in S3
     const photoUrls = await Promise.all(
@@ -161,6 +165,9 @@ router.get("/generate-video", async (req, res) => {
     );
     // Generate unique video_id and record metadata in DynamoDB
     const videoID = uuidv4();
+    const qutUsername = await getParameterFromStore(
+      "/n11780100/dynamo/qut-username"
+    );;
     const videoMetadata = new PutCommand({
       TableName: dynamoTableName,
       Item: {
@@ -252,6 +259,7 @@ router.delete("/delete-video/:filename", async (req, res) => {
   const videoKey = `videos/${username}/${filename}`;
 
   try {
+    // FIXME:
     // Send the delete command to S3
     await s3Client.send(
       new DeleteObjectCommand({

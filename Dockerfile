@@ -48,10 +48,7 @@ RUN npm install -g serve
 
 # Set NODE_ENV to production
 ENV NODE_ENV production
-ENV COGNITO_POOL_ID=ap-southeast-2_tS0yDXCN3
-ENV COGNITO_POOL_APP_ID=8eg6dbrtk09o7km999e6jih8f
 ENV AWS_BUCKET_NAME=n11780100-assignment2
-ENV QUT_USERNAME=n11780100@qut.edu.au
 
 # Expose ports for frontend and backend
 EXPOSE 80 3000
