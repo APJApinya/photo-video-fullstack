@@ -167,7 +167,7 @@ router.get("/generate-video", async (req, res) => {
     const videoID = uuidv4();
     const qutUsername = await getParameterFromStore(
       "/n11780100/dynamo/qut-username"
-    );;
+    );
     const videoMetadata = new PutCommand({
       TableName: dynamoTableName,
       Item: {

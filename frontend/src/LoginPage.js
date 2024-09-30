@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Form, Button, Container, Row } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -7,6 +7,17 @@ function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
+
+  // useEffect to handle Google OAuth code exchange for tokens
+  useEffect(() => {
+    const queryParams = new URLSearchParams(window.location.search);
+    const code = queryParams.get("code");
+
+    // Only execute if there is an OAuth code present
+    if (code) {
+      exchangeCodeForTokens(code);
+    }
+  }, []);
 
   const handleLogin = async (event) => {
     event.preventDefault();
@@ -28,6 +39,41 @@ function LoginPage() {
     } catch (error) {
       console.error("Login failed:", error);
       alert("Login failed. Please check your credentials.");
+    }
+  };
+
+  const handleGoogleLogin = () => {
+    const cognitoDomain =
+      "https://n11780100.auth.ap-southeast-2.amazoncognito.com";
+    const clientId = process.env.REACT_APP_COGNITO_CLIENT_ID;
+    const redirectUri = process.env.REACT_APP_GOOGLE_REDIRECT_URI;
+    const googleLoginUrl = `${cognitoDomain}/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&identity_provider=Google`;
+
+    window.location.href = googleLoginUrl;
+  };
+
+  const exchangeCodeForTokens = async (code) => {
+    try {
+      const redirectUri = process.env.REACT_APP_GOOGLE_REDIRECT_URI;
+      const response = await axios.post(
+        `${process.env.REACT_APP_BACKEND_URL}/auth/google-callback`,
+        {
+          code,
+          redirectUri,
+        }
+      );
+
+      const { accessToken, idToken, username } = response.data;
+      sessionStorage.setItem("username", username);
+      sessionStorage.setItem("accessToken", accessToken);
+      sessionStorage.setItem("idToken", idToken);
+
+      if (sessionStorage.getItem("accessToken")) {
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error("Failed to exchange code for tokens:", error);
+      alert("Login failed. Please try again.");
     }
   };
 
@@ -70,6 +116,13 @@ function LoginPage() {
               onClick={() => navigate("/signup")} // Redirect to signup page
             >
               Sign Up
+            </Button>
+            <Button
+              variant="primary"
+              className="w-100 mt-3"
+              onClick={handleGoogleLogin} // Handle Google login
+            >
+              Login with Google
             </Button>
           </Form>
         </Row>

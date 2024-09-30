@@ -24,35 +24,21 @@ const cognito = new AWS.CognitoIdentityServiceProvider({
 
 // Initialize MySQL connection
 const mysql = require("mysql2/promise");
-const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
+const { getSecretCredentials } = require("./secretCache");
+const { getParameterFromStore } = require("./parameterCache");
 
-const secretClient = new SecretsManagerClient({ region: "ap-southeast-2" });
-const secretName = "n11780100-RDS";
-async function getMysqlCredentials() {
-  try {
-    const response = await secretClient.send(
-      new GetSecretValueCommand({ SecretId: secretName, VersionStage: "AWSCURRENT" })
-    );
-    const secret = JSON.parse(response.SecretString);
-    return {
-      host: secret.host,
-      user: secret.username,
-      password: secret.password,
-      database: secret.database,
-    };
-  } catch (error) {
-    console.error("Error fetching secrets from Secrets Manager:", error);
-    throw error;
-  }
-}
 async function createPool(app) {
   try {
-    const credentials = await getMysqlCredentials();
+    const secretName = await getParameterFromStore(
+      "/n11780100/RDS"
+    );
+    const credentials = await getSecretCredentials(secretName);
+
     const pool = mysql.createPool({
       host: credentials.host,
-      user: credentials.user,
+      user: credentials.username,
       password: credentials.password,
-      database: credentials.database,
+      database: credentials.dbInstanceIndentifier,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
