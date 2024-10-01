@@ -5,13 +5,17 @@ import { Container, Row, Col, Button, Form } from "react-bootstrap";
 function UploadComponent({ onUploadComplete }) {
   const [files, setFiles] = useState([]);
   const [user, setUser] = useState("");
+  const [accessToken, setAccessToken] = useState();
+  
 
   const backendURL = process.env.REACT_APP_BACKEND_URL;
-  
+
   useEffect(() => {
     const storedUsername = sessionStorage.getItem("username");
-    if (storedUsername) {
+    const storedAccessToken = sessionStorage.getItem("accessToken");
+    if (storedUsername && storedAccessToken) {
       setUser(storedUsername);
+      setAccessToken(storedAccessToken);
     }
   }, []);
 
@@ -38,7 +42,7 @@ function UploadComponent({ onUploadComplete }) {
     try {
       await axios.post(`${backendURL}/catalog/upload`, formData, {
         headers: {
-          Username: user,
+          Authorization: `Bearer ${accessToken}`,
         },
       });
       alert("Photos uploaded successfully!");

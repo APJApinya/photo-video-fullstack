@@ -2,6 +2,7 @@ const express = require("express");
 const path = require("path");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
 const createError = require("http-errors");
 const indexRouter = require("./routes/index");
 const catalogRouter = require("./routes/catalog");
@@ -33,12 +34,11 @@ async function createPool(app) {
       "/n11780100/RDS"
     );
     const credentials = await getSecretCredentials(secretName);
-
     const pool = mysql.createPool({
       host: credentials.host,
       user: credentials.username,
       password: credentials.password,
-      database: credentials.dbInstanceIndentifier,
+      database: credentials.dbInstanceIdentifier,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
@@ -71,15 +71,36 @@ app.use(cookieParser());
 
 // Cognito Authorization middleware (need to take username from frontend)
 async function cognitoAuthorize(req, res, next) {
-  const username = req.headers["username"];
-  if (!username) {
-    return res.status(401).send("Unauthorized: No username provided");
+  const receivedHeader = req.headers["authorization"];
+  console.log("this received header in middleware: ", receivedHeader);
+  const accessToken = req.headers["authorization"]?.split(" ")[1]; // Extract the token from 'Bearer token'
+  
+  if (!accessToken) {
+    console.error("Authorization token is missing.");
+    return res.status(401).send("Unauthorized: No token provided");
   }
+  
   try {
+    // Decode the JWT token to extract group data
+    const decodedToken = jwt.decode(accessToken);
+
+    if (!decodedToken) {
+      console.error("Failed to decode token.");
+      return res.status(401).send("Invalid token");
+    }
+    // Extract the username and group information
+    const username = decodedToken.username || decodedToken.sub;
+    const groups = decodedToken["cognito:groups"] || [];
+
+    console.log("This is username from middleware: ", username);
+    console.log("This is groups from middleware: ", groups);
+
     req.username = username;
+    req.groups = Array.isArray(groups) ? groups : [groups]; // Set req.groups, even if it's empty
+   
     next();
   } catch (error) {
-    console.error("Error om middleware:", error);
+    console.error("Authorization error:", error);
     res.status(500).send("Internal Server Error");
   }
 }

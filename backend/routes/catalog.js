@@ -32,7 +32,6 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage }).array("photos", 10);
 ffmpeg.setFfmpegPath("/usr/bin/ffmpeg");
 
-
 // TODO: Upload photos to S3 in 'uploads/{username}'
 router.post("/upload", async (req, res) => {
   const s3Client = req.app.get("s3Client");
@@ -54,7 +53,6 @@ router.post("/upload", async (req, res) => {
     try {
       // Delete existing photos in 'uploads/{username}' folder before uploading new ones
       await deleteUserFilesInFolder(s3Client, username, "uploads/");
-      // FIXME: 
 
       for (const file of req.files) {
         const uploadParams = {
@@ -171,12 +169,12 @@ router.get("/generate-video", async (req, res) => {
     const videoMetadata = new PutCommand({
       TableName: dynamoTableName,
       Item: {
-          [partitionKey]: qutUsername,
-          [sortKey]: videoID,
-          user: username,
-          upload_timestamp: new Date().toISOString(),
-          video_url: signedUrl,
-          format: "mp4",
+        [partitionKey]: qutUsername,
+        [sortKey]: videoID,
+        user: username,
+        upload_timestamp: new Date().toISOString(),
+        video_url: signedUrl,
+        format: "mp4",
       },
     });
     // Save metadata to DynamoDB
@@ -196,46 +194,125 @@ router.get("/generate-video", async (req, res) => {
 // TODO: List videos
 router.get("/list-videos", async (req, res) => {
   const s3Client = req.app.get("s3Client");
-  const username = req.username; // Use the username to identify the user's folder
+  const username = req.username;
+  const groups = req.groups;
+
+  console.log("Username in /list-video:", username);
+  console.log("Groups in /list-video:", groups); 
 
   // Ensure the username is correctly set
   if (!username) {
     console.error("Username is missing.");
     return res.status(400).send("Username is missing.");
   }
+  if (!groups) {
+    console.error("Groups is missing or undefined.");
+    return res.status(400).send("Group information is missing.");
+  }
+
+
   try {
-    // List video objects in the 'videos/{username}' folder
-    const command = new ListObjectsV2Command({
-      Bucket: bucketName,
-      Prefix: `videos/${username}/`, // Prefix to list only this user's videos
-    });
-    const data = await s3Client.send(command);
+    let videoFiles = [];
+    if (groups.includes("admin")) {
+      // Admin user - list all videos in all user folders
+      console.log("Admin user detected, attempting to list all videos.");
+      const command = new ListObjectsV2Command({
+        Bucket: bucketName,
+        Prefix: `videos/`,
+        Delimiter: "/", // To get folders inside 'videos/'
+      });
+      const data = await s3Client.send(command);
 
-    // If no files are found, return an empty array
-    if (!data.Contents || data.Contents.length === 0) {
-      return res.json([]);
+      console.log("ListObjectsV2Command executed for listing folders:");
+      console.log("CommonPrefixes (folders found):", data.CommonPrefixes);
+
+      // If no folders are found, log and return an empty array
+      if (!data.CommonPrefixes || data.CommonPrefixes.length === 0) {
+        console.log("No folders found under 'videos/'");
+        return res.json([]);
+      }
+
+      // Loop through each user folder and fetch their videos
+      // data.CommonPrefixes is all folders inside /videos
+      for (const folder of data.CommonPrefixes) {
+        const userPrefix = folder.Prefix; // e.g., 'videos/{username}/'
+        console.log("Processing folder:", userPrefix);
+
+        const userVideosCommand = new ListObjectsV2Command({
+          Bucket: bucketName,
+          Prefix: userPrefix,
+        });
+
+        const userVideosData = await s3Client.send(userVideosCommand);
+        console.log(`Videos found in folder '${userPrefix}':`, userVideosData.Contents);
+
+        if (userVideosData.Contents && userVideosData.Contents.length > 0) {
+          const userVideos = await Promise.all(
+            userVideosData.Contents.map(async (item) => {
+              console.log("Generating signed URL for video:", item.Key);
+              const signedUrl = await getSignedUrl(
+                s3Client,
+                new GetObjectCommand({
+                  Bucket: bucketName,
+                  Key: item.Key,
+                }),
+                { expiresIn: 3600 }
+              );
+
+              return {
+                filename: item.Key.split("/").pop(),
+                path: item.Key,
+                url: signedUrl,
+              };
+            })
+          );
+
+          videoFiles.push(...userVideos);
+          console.log("Videos added to the list from folder:", userPrefix);
+        } else {
+          console.log("No videos found in folder:", userPrefix);
+        }
+      }
+    } else {
+      // Regular user - list only their videos
+      console.log(`Regular user detected, attempting to list videos for user: ${username}`);
+
+      const command = new ListObjectsV2Command({
+        Bucket: bucketName,
+        Prefix: `videos/${username}/`,
+      });
+
+      const data = await s3Client.send(command);
+      console.log(`Videos found for user '${username}':`, data.Contents);
+
+      if (!data.Contents || data.Contents.length === 0) {
+        console.log(`No videos found for user '${username}'.`);
+        return res.json([]);
+      }
+
+      // Generate presigned URLs for each video
+      videoFiles = await Promise.all(
+        data.Contents.map(async (item) => {
+          console.log("Generating signed URL for video:", item.Key);
+
+          const signedUrl = await getSignedUrl(
+            s3Client,
+            new GetObjectCommand({
+              Bucket: bucketName,
+              Key: item.Key,
+            }),
+            { expiresIn: 3600 }
+          );
+
+          return {
+            filename: item.Key.split("/").pop(), 
+            path: item.Key, 
+            url: signedUrl, 
+          };
+        })
+      );
     }
-
-    // Map through the videos to generate presigned URLs for each video
-    const videoFiles = await Promise.all(
-      data.Contents.map(async (item) => {
-        const signedUrl = await getSignedUrl(
-          s3Client,
-          new GetObjectCommand({
-            Bucket: bucketName,
-            Key: item.Key,
-          }),
-          { expiresIn: 3600 }
-        );
-
-        return {
-          filename: item.Key.split("/").pop(), // Extract the filename
-          path: item.Key, // Full path in S3
-          url: signedUrl, // Presigned URL for downloading the video
-        };
-      })
-    );
-
+    console.log("Final list of videos to be sent in response:", videoFiles);
     res.json(videoFiles); // Return the list of video files
   } catch (error) {
     console.error("Error listing videos from S3:", error);
@@ -244,31 +321,33 @@ router.get("/list-videos", async (req, res) => {
 });
 
 // TODO: Delete video
-router.delete("/delete-video/:filename", async (req, res) => {
+router.delete("/delete-video", async (req, res) => {
   const s3Client = req.app.get("s3Client");
-  const username = req.username; // Use the username to identify the user's folder
-  const filename = req.params.filename; // Get the filename from the request parameters
+  const path = req.body.path;
+  const groups = req.groups;
 
-  // Ensure the username and filename are correctly set
-  if (!username || !filename) {
-    console.error("Username or filename is missing.");
-    return res.status(400).send("Username or filename is missing.");
+  // Ensure user permission
+  if (!groups.includes("admin")) {
+    return res.status(403).send("Forbidden: Insufficient permissions");
   }
 
-  // Construct the path to the video in the S3 bucket
-  const videoKey = `videos/${username}/${filename}`;
+  // Ensure the username and filename are correctly set
+  if (!path) {
+    console.error("Path is missing.");
+    return res.status(400).send("Path is missing.");
+  }
+  console.log("This is path of vid to remove: ", path);
 
   try {
-    // FIXME:
     // Send the delete command to S3
     await s3Client.send(
       new DeleteObjectCommand({
         Bucket: bucketName,
-        Key: videoKey,
+        Key: path,
       })
     );
 
-    console.log("Video deleted successfully:", videoKey);
+    console.log("Video deleted successfully:", path);
     res.send("Video deleted successfully.");
   } catch (error) {
     console.error("Error deleting video from S3:", error);

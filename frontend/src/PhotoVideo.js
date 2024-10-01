@@ -6,17 +6,25 @@ import UploadComponent from "./UploadComponent";
 
 function PhotoVideo() {
   const [user, setUser] = useState("");
+  const [groups, setGroups] = useState([]);
+  const [accessToken, setAccessToken] = useState();
   const [isLoading, setIsLoading] = useState(false);
   const [userVideos, setUserVideos] = useState([]);
 
   const navigate = useNavigate();
   const backendURL = process.env.REACT_APP_BACKEND_URL;
 
-  //Fetch username from session storage
+  //Fetch from session storage
   useEffect(() => {
     const storedUsername = sessionStorage.getItem("username");
-    if (storedUsername) {
+    const storedGroups = sessionStorage.getItem("groups");
+    const storedAccessToken = sessionStorage.getItem("accessToken");
+    console.log("Stored Groups in frontend:", JSON.parse(storedGroups) || []);
+
+    if (storedUsername && storedAccessToken) {
       setUser(storedUsername);
+      setGroups(JSON.parse(storedGroups) || []); // Parse groups and provide default value if null
+      setAccessToken(storedAccessToken);
     } else {
       navigate("/login");
     }
@@ -24,10 +32,9 @@ function PhotoVideo() {
 
   //Function to handle logout
   const handleLogout = () => {
-    sessionStorage.removeItem("accessToken");
-    sessionStorage.removeItem("idToken");
-    sessionStorage.removeItem("username");
-    navigate("/login");
+    sessionStorage.clear();
+    navigate("/");
+    window.location.reload();
   };
 
   // Function to fetch the user's videos
@@ -35,11 +42,11 @@ function PhotoVideo() {
     try {
       const response = await axios.get(`${backendURL}/catalog/list-videos`, {
         headers: {
-          Username: user
+          Authorization: `Bearer ${accessToken}`,
         },
       });
       setUserVideos(response.data);
-      console.log("This is user video data from fetchUserVideos(): ", userVideos);
+      console.log("This is user video data from fetchUserVideos():", response.data);
     } catch (error) {
       console.error("Error fetching user videos:", error);
     }
@@ -47,10 +54,10 @@ function PhotoVideo() {
 
   // Fetch user videos when the user state is set
   useEffect(() => {
-    if(user){
-        fetchUserVideos();
+    if (user && accessToken) {
+      fetchUserVideos();
     }
-  }, [user]);
+  }, [user, accessToken]);
 
   // Function to handle video generation
   const handleGenerateVideo = async () => {
@@ -58,7 +65,7 @@ function PhotoVideo() {
     try {
       await axios.get(`${backendURL}/catalog/generate-video`, {
         headers: {
-          Username: user
+          Authorization: `Bearer ${accessToken}`,
         },
       });
       fetchUserVideos(); // Refresh the list of videos after generating a new one
@@ -70,11 +77,14 @@ function PhotoVideo() {
   };
 
   // Function to handle video deletion
-  const handleDeleteVideo = async (filename) => {
+  const handleDeleteVideo = async (path) => {
     try {
-      await axios.delete(`${backendURL}/catalog/delete-video/${filename}`, {
+      await axios.delete(`${backendURL}/catalog/delete-video`, {
+        data: {
+          path: path,
+        },
         headers: {
-          Username: user
+          Authorization: `Bearer ${accessToken}`,
         },
       });
       fetchUserVideos(); // Refresh the list of videos after deleting
@@ -97,9 +107,7 @@ function PhotoVideo() {
           <Button variant="secondary" onClick={handleLogout} className="mb-4">
             Logout
           </Button>
-          <UploadComponent
-            onUploadComplete={handleGenerateVideo}
-          />
+          <UploadComponent onUploadComplete={handleGenerateVideo} />
 
           {isLoading && (
             <div className="text-center mt-3">
@@ -122,13 +130,15 @@ function PhotoVideo() {
                           width="100%"
                           className="mb-3"
                         ></video>
-                        <Button
-                          onClick={() => handleDeleteVideo(video.filename)}
-                          variant="danger"
-                          className="mt-auto"
-                        >
-                          Delete
-                        </Button>
+                        {Array.isArray(groups) && groups.includes("admin") && (
+                          <Button
+                            onClick={() => handleDeleteVideo(video.path)} // Pass the full path to handleDeleteVideo
+                            variant="danger"
+                            className="mt-auto"
+                          >
+                            Delete
+                          </Button>
+                        )}
                       </Card.Body>
                     </Card>
                   </Col>

@@ -29,8 +29,10 @@ function LoginPage() {
           password,
         }
       );
-      const { accessToken, idToken } = response.data;
+      const { accessToken, idToken, groups } = response.data;
+      console.log("Groups of this user is: ", groups);
       sessionStorage.setItem("username", username);
+      sessionStorage.setItem("groups", JSON.stringify(groups)); // Store group as JSON string
       sessionStorage.setItem("accessToken", accessToken); // used in API calls that need authorization (in the header)
       sessionStorage.setItem("idToken", idToken); // used in frontend logic as it stores user info
       if (sessionStorage.getItem("accessToken")) {
@@ -43,8 +45,7 @@ function LoginPage() {
   };
 
   const handleGoogleLogin = () => {
-    const cognitoDomain =
-      "https://n11780100.auth.ap-southeast-2.amazoncognito.com";
+    const cognitoDomain = process.env.REACT_APP_GOOGLE_COGNITO_DOMAIN;
     const clientId = process.env.REACT_APP_COGNITO_CLIENT_ID;
     const redirectUri = process.env.REACT_APP_GOOGLE_REDIRECT_URI;
     const googleLoginUrl = `${cognitoDomain}/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&identity_provider=Google`;
