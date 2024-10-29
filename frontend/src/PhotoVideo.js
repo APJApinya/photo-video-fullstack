@@ -40,7 +40,7 @@ function PhotoVideo() {
   // Function to fetch the user's videos
   const fetchUserVideos = async () => {
     try {
-      const response = await axios.get(`${backendURL}/catalog/list-videos`, {
+      const response = await axios.get(`${backendURL}/videos/list-videos`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -63,7 +63,7 @@ function PhotoVideo() {
   const handleGenerateVideo = async () => {
     setIsLoading(true);
     try {
-      await axios.get(`${backendURL}/catalog/generate-video`, {
+      await axios.get(`${backendURL}/videos/generate-video`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -79,7 +79,7 @@ function PhotoVideo() {
   // Function to handle video deletion
   const handleDeleteVideo = async (path) => {
     try {
-      await axios.delete(`${backendURL}/catalog/delete-video`, {
+      await axios.delete(`${backendURL}/videos/delete-video`, {
         data: {
           path: path,
         },

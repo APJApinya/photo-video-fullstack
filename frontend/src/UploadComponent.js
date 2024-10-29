@@ -6,7 +6,6 @@ function UploadComponent({ onUploadComplete }) {
   const [files, setFiles] = useState([]);
   const [user, setUser] = useState("");
   const [accessToken, setAccessToken] = useState();
-  
 
   const backendURL = process.env.REACT_APP_BACKEND_URL;
 
@@ -35,12 +34,17 @@ function UploadComponent({ onUploadComplete }) {
 
     const formData = new FormData();
     for (let i = 0; i < files.length; i++) {
-      const newFileName = `${files[i].name}`;
-      formData.append("photos", files[i], newFileName);
+      formData.append("photos", files[i], files[i].name);
+    }
+
+    console.log("Uploading photos to:", `${backendURL}/photos/upload`);
+    console.log("Access token:", accessToken);
+    for (let entry of formData.entries()) {
+      console.log("formData: ", entry[0], entry[1]);
     }
 
     try {
-      await axios.post(`${backendURL}/catalog/upload`, formData, {
+      await axios.post(`${backendURL}/photos/upload`, formData, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -49,6 +53,10 @@ function UploadComponent({ onUploadComplete }) {
       onUploadComplete(); // Notify parent to generate video
     } catch (error) {
       console.error("Error uploading photos:", error);
+      if (error.response) {
+        console.error("Response data:", error.response.data);
+        console.error("Response status:", error.response.status);
+      }
       alert("Failed to upload photos.");
     }
   };

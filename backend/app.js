@@ -1,103 +1,69 @@
 const express = require("express");
-const path = require("path");
-const cookieParser = require("cookie-parser");
-const cors = require("cors");
+const axios = require("axios");
 const jwt = require("jsonwebtoken");
-const createError = require("http-errors");
-const indexRouter = require("./routes/index");
-const catalogRouter = require("./routes/catalog");
-const authRouter = require("./routes/auth");
-
-require("dotenv").config();
-const { S3Client } = require("@aws-sdk/client-s3");
-
 const app = express();
-const AWS = require("aws-sdk");
+const multer = require("multer");
+// const FormData = require("form-data");
 
-// Initialize AWS S3 SDK client
-const s3Client = new S3Client({ region: "ap-southeast-2" });
-app.set("s3Client", s3Client);
+// Set up multer to parse multipart form data
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage }).array("photos", 10);
 
-// Initialize AWS Cognito SDK
-const cognito = new AWS.CognitoIdentityServiceProvider({
-  region: "ap-southeast-2",
-});
+// Trust the proxy to use X-Forwarded-For headers correctly
+app.set("trust proxy", "loopback");
 
-// Initialize MySQL connection
-const mysql = require("mysql2/promise");
-const { getSecretCredentials } = require("./secretCache");
-const { getParameterFromStore } = require("./parameterCache");
+app.use(express.json());
+const cors = require("cors");
+app.use(
+  cors({
+    origin: "https://n11780100.cab432.com",
+    credentials: true,
+  })
+);
 
-async function createPool(app) {
-  try {
-    const secretName = await getParameterFromStore(
-      "/n11780100/RDS"
-    );
-    const credentials = await getSecretCredentials(secretName);
-    const pool = mysql.createPool({
-      host: credentials.host,
-      user: credentials.username,
-      password: credentials.password,
-      database: credentials.dbInstanceIdentifier,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-    });
-    app.set("mysqlPool", pool);
-    console.log("MySQL pool created successfully.");
-  } catch (error) {
-    console.error("Error creating MySQL pool:", error);
-    throw error;
-  }
-}
-
-// Set up the MySQL pool globally
-createPool(app).catch((error) => {
-  console.error("Error during pool creation:", error);
-});
-
+// Rate limiter with a custom keyGenerator
 const RateLimit = require("express-rate-limit");
 const limiter = RateLimit({
-  windowMs: 1 * 10 * 1000, // 10 seconds
+  windowMs: 1 * 10 * 1000,
   max: 10,
+  keyGenerator: (req) => req.ip, // Use req.ip directly
+});
+app.use(limiter);
+
+app.get("/api/health", (req, res) => {
+  res.status(200).send("OK");
 });
 
-// Apply rate limiter to all requests
-app.use(limiter);
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-
-// Cognito Authorization middleware (need to take username from frontend)
+// Authorization Middleware to extract username and groups from JWT
 async function cognitoAuthorize(req, res, next) {
   const receivedHeader = req.headers["authorization"];
-  console.log("this received header in middleware: ", receivedHeader);
-  const accessToken = req.headers["authorization"]?.split(" ")[1]; // Extract the token from 'Bearer token'
-  
+  console.log("Received authorization header:", receivedHeader);
+
+  const accessToken = receivedHeader?.split(" ")[1]; // Extract token from 'Bearer token'
+  console.log("Received accessToken:", accessToken);
+
   if (!accessToken) {
     console.error("Authorization token is missing.");
     return res.status(401).send("Unauthorized: No token provided");
   }
-  
+
   try {
-    // Decode the JWT token to extract group data
+    // Decode the JWT token to extract user details
     const decodedToken = jwt.decode(accessToken);
 
     if (!decodedToken) {
       console.error("Failed to decode token.");
       return res.status(401).send("Invalid token");
     }
-    // Extract the username and group information
+
+    // Extract username and group information
     const username = decodedToken.username || decodedToken.sub;
     const groups = decodedToken["cognito:groups"] || [];
 
-    console.log("This is username from middleware: ", username);
-    console.log("This is groups from middleware: ", groups);
+    // Attach username and groups to the request headers for downstream services
+    req.headers["x-username"] = username;
+    req.headers["x-groups"] = JSON.stringify(groups);
 
-    req.username = username;
-    req.groups = Array.isArray(groups) ? groups : [groups]; // Set req.groups, even if it's empty
-   
     next();
   } catch (error) {
     console.error("Authorization error:", error);
@@ -105,39 +71,77 @@ async function cognitoAuthorize(req, res, next) {
   }
 }
 
-// Initialize your routes after parameters are cached
-app.use("/catalog", cognitoAuthorize);
-app.use("/catalog/list-videos", cognitoAuthorize);
-
-app.use("/", indexRouter);
-app.use("/catalog", catalogRouter);
-app.use("/auth", authRouter);
-
-// Catch 404 and forward to error handler
-app.use(function (req, res, next) {
-  next(createError(404, "Endpoint not found"));
+// Public Routes (no authorization required)
+app.use("/api/auth/signup", (req, res) => {
+  axios({
+    method: req.method,
+    url: `http://3.106.216.80:8084/signup`,
+    data: req.body,
+    headers: req.headers,
+  })
+    .then((response) => res.json(response.data))
+    .catch((error) =>
+      res.status(error.response?.status || 500).send(error.message)
+    );
 });
 
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url}`);
-  next();
+app.use("/api/auth/login", (req, res) => {
+  axios({
+    method: req.method,
+    url: `http://3.106.216.80:8084/login`,
+    data: req.body,
+    headers: req.headers,
+  })
+    .then((response) => res.json(response.data))
+    .catch((error) =>
+      res.status(error.response?.status || 500).send(error.message)
+    );
 });
 
-// Error handler
-app.use(function (err, req, res, next) {
-  const status = err.status || 500;
-  res.status(status).json({
-    error: {
-      status: status,
-      message: err.message,
-    },
-  });
+// Protected Route (authorization required)
+app.use("/api/photos/upload", cognitoAuthorize, upload, async (req, res) => {
+  console.log("This is req.files in app.js: ", req.files);
+
+  try {
+    console.log("This is header sent from app.js: ", req.headers);
+    // Forward `req.files` directly as JSON to `photos.js`
+    const response = await axios.post(
+      "http://54.206.220.67:8082/upload",
+      { files: req.files}, 
+      {
+        headers: {
+          Authorization: req.headers["authorization"],
+          "x-username": req.headers["x-username"],
+          "x-groups": req.headers["x-groups"],
+          "Content-Type": "application/json" // Specify JSON content type
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      }
+    );
+
+    res.json(response.data);
+  } catch (error) {
+    console.error("Error forwarding to photos service:", error.message);
+    res.status(error.response?.status || 500).send(error.message);
+  }
 });
 
-// Start the server and listen on port 3000
-const PORT = 3000;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server is running on http://0.0.0.0:${PORT}`);
+// Route to Videos Service
+app.use("/api/videos", cognitoAuthorize, (req, res) => {
+  axios({
+    method: req.method,
+    url: `http://52.62.121.184:8083${req.url}`,
+    data: req.body,
+    headers: req.headers,
+  })
+    .then((response) => res.json(response.data))
+    .catch((error) =>
+      res.status(error.response?.status || 500).send(error.message)
+    );
 });
 
-module.exports = app;
+const PORT = process.env.PORT || 8081;
+app.listen(PORT, () => {
+  console.log(`Core Application Service running on port ${PORT}`);
+});

@@ -113,7 +113,6 @@ router.get("/generate-video", async (req, res) => {
     }
 
     const videoKey = `videos/${username}/output-video-${Date.now()}.mp4`;
-    //FIXME:
 
     // Get presigned URLs for the photos in S3
     const photoUrls = await Promise.all(
@@ -422,15 +421,5 @@ async function generateVideo(photoUrls, username) {
       .save(outputFile); // Save to temporary file
   });
 }
-// // Helper function to upload the generated video to S3
-// async function uploadGeneratedVideo(s3Client, videoKey, videoBuffer) {
-//   const uploadParams = {
-//     Bucket: bucketName,
-//     Key: videoKey,
-//     Body: videoBuffer, // Directly upload the buffer
-//     ContentType: "video/mp4",
-//   };
-//   return s3Client.send(new PutObjectCommand(uploadParams));
-// }
 
 module.exports = router;

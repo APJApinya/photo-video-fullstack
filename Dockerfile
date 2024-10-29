@@ -51,7 +51,7 @@ ENV NODE_ENV production
 ENV AWS_BUCKET_NAME=n11780100-assignment2
 
 # Expose ports for frontend and backend
-EXPOSE 80 3000
+EXPOSE 80 8081
 
 # Start both frontend and backend
 CMD sh -c "serve -s /app/frontend -l 80 & node /app/backend/app.js"
