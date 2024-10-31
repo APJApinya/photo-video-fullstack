@@ -67,6 +67,7 @@ function PhotoVideo() {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
+        timeout: 60000,
       });
       fetchUserVideos(); // Refresh the list of videos after generating a new one
     } catch (error) {

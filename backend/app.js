@@ -106,7 +106,7 @@ app.use("/api/photos/upload", cognitoAuthorize, upload, async (req, res) => {
     console.log("This is header sent from app.js: ", req.headers);
     // Forward `req.files` directly as JSON to `photos.js`
     const response = await axios.post(
-      "http://54.206.220.67:8082/upload",
+      "http://3.107.174.222:8082/upload",
       { files: req.files}, 
       {
         headers: {
@@ -131,7 +131,7 @@ app.use("/api/photos/upload", cognitoAuthorize, upload, async (req, res) => {
 app.use("/api/videos", cognitoAuthorize, (req, res) => {
   axios({
     method: req.method,
-    url: `http://52.62.121.184:8083${req.url}`,
+    url: `http://54.79.233.170:8083${req.url}`,
     data: req.body,
     headers: req.headers,
   })
