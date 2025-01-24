@@ -1,0 +1,11 @@
+{
+  "name": "creation",
+  "version": "1.0.0",
+  "main": "creation.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Apinya",
+  "license": "ISC",
+  "description": ""
+}
