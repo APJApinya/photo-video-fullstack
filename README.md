@@ -54,14 +54,14 @@ The application is built using a microservices architecture, where each service 
   - Media Processing: FFmpeg
 
 # How it works
-1. HTTPS Access:
+1. **HTTPS Access**:
   - The application domain is managed by Route 53 and served through an ALB over HTTPS (port 443).
   - Internal microservices communicate over a secure private network on port 80.
-2. User Workflow:
+2. **User Workflow**:
   - Users sign up and log in securely via the Auth Service.
   - Authenticated users can upload photos (stored in S3) and request video creation.
-3. Video Processing Pipeline:
+3. **Video Processing Pipeline**:
   - A serverless pipeline processes photos into videos using AWS SQS, Lambda, and FFmpeg.
   - Generated videos are stored in S3, with metadata saved in DynamoDB for tracking.
-4. Scalability:
+4. **Scalability**:
   - Auto-scaling is enabled on ECS, ensuring efficient resource utilization during peak loads.
