@@ -36,7 +36,7 @@ The application is built using a microservices architecture, where each service 
   - **AWS SQS**: Queues video generation tasks.
   - **AWS Lambda**: Serverless function for processing intensive video rendering tasks.
 
-![AWS Architecture Diagram](./Application architecture.jpg)
+![AWS Architecture Diagram](./Application-architecture.jpg)
 
 # Tech Stack
 - Backend: Node.js, Express.js, AWS SDK
