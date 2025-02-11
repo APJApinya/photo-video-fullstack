@@ -1,14 +1,16 @@
+# 🎞️Photos to Videos application with scalable infrastructure on AWS cloud 
+
 # Overview
 This project is a cloud-native, microservices-based application designed for scalability, security, and modularity. 
 It leverages AWS services to deliver high availability, secure content delivery, and seamless backend integration. 
 The architecture includes secure HTTPS endpoints, private networking for internal microservice communication.
 
-This project highlights:
+**This project highlights**:
 - Effective use of AWS services for secure, scalable, and serverless architectures.
 - Integration of load balancing, private networking, and HTTPS for production-grade deployments.
 - A practical implementation of microservices and cloud-native principles.
 
-# Key Features
+# 🔑Key Features
 - **Secure HTTPS Access**: Content is served through Amazon Route 53 and an Application Load Balancer (ALB) over port 443 with a valid AWS ACM SSL certificate.
 - **Microservices Communication**: Internal communication between microservices is handled securely over a private network using port 80.
 - **User Authentication**: Secure JWT-based authentication using AWS Cognito.
